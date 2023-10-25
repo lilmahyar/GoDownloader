@@ -12,17 +12,12 @@ import (
 
 func main() {
 
+	processorCount := 6
+
 	fmt.Println("Url : ")
 	var fileURL string
 
-	fileURL = "https://dl2.soft98.ir/soft/m/Mozilla.Firefox.119.0.EN.x64.zip?1698160384"
-
-	// _, err := fmt.Scan(&fileURL)
-
-	// if err != nil {
-	// 	fmt.Println("Error:", err)
-	// 	return
-	// }
+	fileURL = "https://dl2.soft98.ir/soft/m/Mozilla.Firefox.119.0.EN.x64.zip?1698218007"
 
 	urlParsed, err := url.Parse(fileURL)
 	if err != nil {
@@ -43,13 +38,64 @@ func main() {
 
 	if err != nil {
 		log.Fatal(err)
+		return
+	}
+
+	fileSize := resp.ContentLength
+
+	eachChunk := fileSize / int64(processorCount)
+
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	defer resp.Body.Close()
 
-	_, err = io.Copy(tempFile, resp.Body)
+	dataChan := make(chan []byte)
+	for i := 0; i < processorCount; i++ {
+		go downloadChunk(fileURL, int64(i), eachChunk, dataChan)
+	}
+
+	counter := 0
+
+	allChunks := []byte{}
+	for chunck := range dataChan {
+		counter++
+
+		allChunks = append(allChunks, chunck...)
+
+		if counter == processorCount {
+			close(dataChan)
+		}
+	}
+
+	_, err = tempFile.Write(allChunks)
 
 	defer tempFile.Close()
 
 	fmt.Println(fileName)
+}
+
+func downloadChunk(url string, index, size int64, downloadedChunk chan []byte) {
+
+	req, err := http.NewRequest("GET", url, nil)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	start := index * size
+
+	contentRange := fmt.Sprintf("bytes=%d-%d", start, start+size-1)
+	req.Header.Add("Range", contentRange)
+
+	client := &http.Client{}
+
+	resp, err := client.Do(req)
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+
+	downloadedChunk <- body
 }
