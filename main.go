@@ -10,19 +10,33 @@ import (
 	"strings"
 )
 
+type DataChunk struct {
+	index int64
+	chunk []byte
+}
+
 func main() {
+
+	_, err := http.Get("https://www.google.com/")
+
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	processorCount := 6
 
 	fmt.Println("Url : ")
 	var fileURL string
 
-	fileURL = "https://dl2.soft98.ir/soft/m/Mozilla.Firefox.119.0.EN.x64.zip?1698218007"
+	fileURL = "https://dl.yasdl.com/2023/Software/Mozilla.Firefox.119.0.EN.x64_YasDL.com.rar?a"
+
+	resp, err := http.Head(fileURL)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	urlParsed, err := url.Parse(fileURL)
-	if err != nil {
-		fmt.Println("Error:", err)
-	}
 
 	path := urlParsed.Path
 	splitedPath := strings.Split(path, "/")
@@ -33,8 +47,6 @@ func main() {
 	if err != nil {
 		fmt.Println("Error:", err)
 	}
-
-	resp, err := http.Head(fileURL)
 
 	if err != nil {
 		log.Fatal(err)
@@ -51,32 +63,38 @@ func main() {
 
 	defer resp.Body.Close()
 
-	dataChan := make(chan []byte)
+	dataChan := make(chan DataChunk)
 	for i := 0; i < processorCount; i++ {
 		go downloadChunk(fileURL, int64(i), eachChunk, dataChan)
 	}
 
 	counter := 0
 
-	allChunks := []byte{}
-	for chunck := range dataChan {
+	allData := make([][]byte, processorCount)
+
+	for chunk := range dataChan {
 		counter++
 
-		allChunks = append(allChunks, chunck...)
+		allData[chunk.index] = chunk.chunk
 
 		if counter == processorCount {
 			close(dataChan)
 		}
 	}
 
-	_, err = tempFile.Write(allChunks)
+	finalContent := []byte{}
+	for _, data := range allData {
+		finalContent = append(finalContent, data...)
+	}
+
+	_, err = tempFile.Write(finalContent)
 
 	defer tempFile.Close()
 
 	fmt.Println(fileName)
 }
 
-func downloadChunk(url string, index, size int64, downloadedChunk chan []byte) {
+func downloadChunk(url string, index, size int64, downloadedChunk chan DataChunk) {
 
 	req, err := http.NewRequest("GET", url, nil)
 
@@ -93,9 +111,9 @@ func downloadChunk(url string, index, size int64, downloadedChunk chan []byte) {
 
 	resp, err := client.Do(req)
 
-	defer resp.Body.Close()
-
 	body, err := io.ReadAll(resp.Body)
 
-	downloadedChunk <- body
+	defer resp.Body.Close()
+
+	downloadedChunk <- DataChunk{index: index, chunk: body}
 }
