@@ -45,12 +45,7 @@ func main() {
 	tempFile, err := os.Create(fileName)
 
 	if err != nil {
-		fmt.Println("Error:", err)
-	}
-
-	if err != nil {
 		log.Fatal(err)
-		return
 	}
 
 	fileSize := resp.ContentLength
